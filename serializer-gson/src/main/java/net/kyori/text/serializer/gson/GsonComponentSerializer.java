@@ -46,6 +46,9 @@ import net.kyori.text.event.ClickEvent;
 import net.kyori.text.event.HoverEvent;
 import net.kyori.text.format.TextColor;
 import net.kyori.text.format.TextDecoration;
+import net.kyori.text.BlockNbtComponent;
+import net.kyori.text.EntityNbtComponent;
+import net.kyori.text.NbtComponent;
 import net.kyori.text.serializer.ComponentSerializer;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
@@ -142,8 +145,18 @@ public class GsonComponentSerializer implements ComponentSerializer<Component, C
       component = SelectorComponent.builder().pattern(object.get("selector").getAsString());
     } else if(object.has("keybind")) {
       component = KeybindComponent.builder().keybind(object.get("keybind").getAsString());
+    } else if(object.has("nbt")) {
+      final String nbt = object.get("nbt").getAsString();
+      final boolean interpret = object.has("interpret") && object.getAsJsonPrimitive("interpret").getAsBoolean();
+      if(object.has("block")) {
+        component = BlockNbtComponent.builder().nbtPath(nbt).interpret(interpret).pos(object.get("block").getAsString());
+      } else if(object.has("entity")) {
+        component = EntityNbtComponent.builder().nbtPath(nbt).interpret(interpret).selector(object.get("entity").getAsString());
+      } else {
+        throw notSureHowToDeserialize(element);
+      }
     } else {
-      throw new JsonParseException("Don't know how to turn " + element + " into a Component");
+      throw notSureHowToDeserialize(element);
     }
 
     if(object.has("extra")) {
@@ -228,8 +241,19 @@ public class GsonComponentSerializer implements ComponentSerializer<Component, C
       object.addProperty("selector", ((SelectorComponent) component).pattern());
     } else if(component instanceof KeybindComponent) {
       object.addProperty("keybind", ((KeybindComponent) component).keybind());
+    } else if(component instanceof NbtComponent) {
+      final NbtComponent<?, ?> nc = (NbtComponent<?, ?>) component;
+      object.addProperty("nbt", nc.nbtPath());
+      object.addProperty("interpret", nc.interpret());
+      if(component instanceof BlockNbtComponent) {
+        object.addProperty("block", ((BlockNbtComponent) nc).pos());
+      } else if(component instanceof EntityNbtComponent) {
+        object.addProperty("entity", ((EntityNbtComponent) nc).selector());
+      } else {
+        throw notSureHowToSerialize(component);
+      }
     } else {
-      throw new IllegalArgumentException("Don't know how to serialize " + component + " as a Component");
+      throw notSureHowToSerialize(component);
     }
 
     if(!component.children().isEmpty()) {
@@ -264,5 +288,13 @@ public class GsonComponentSerializer implements ComponentSerializer<Component, C
     }
 
     return object;
+  }
+
+  private static JsonParseException notSureHowToDeserialize(final JsonElement element) {
+    return new JsonParseException("Don't know how to turn " + element + " into a Component");
+  }
+
+  private static IllegalArgumentException notSureHowToSerialize(final Component component) {
+    return new IllegalArgumentException("Don't know how to serialize " + component + " as a Component");
   }
 }
